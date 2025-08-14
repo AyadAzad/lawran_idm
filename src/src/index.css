@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+@keyframes float {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100vh) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.animate-float {
+  animation: float linear infinite;
+}
+/* Hide the default cursor everywhere */
+html, body, * {
+  cursor: none !important;
+}
+
+/* Optional: Keep default cursor for text inputs and textareas */
+input, textarea, [contenteditable] {
+  cursor: text !important;
+}
+
