@@ -14,10 +14,10 @@ if __name__ == '__main__':
 
     # create pywebview window
     window = webview.create_window(
-        'Lawran Downloader',
+        'Lawran IDM',
         'http://localhost:5000',
-        width=1200,
-        height=600,
+        width=1500,
+        height=1000,
         resizable=True,
         text_select=True
     )

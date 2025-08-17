@@ -11,7 +11,7 @@ import {MdSummarize} from "react-icons/md";
 const SideBar = ({isMinimized, setIsMinimized}) => {
   const [activeSection, setActiveSection] = useState('dashboard');
   const [isHovered, setIsHovered] = useState(false);
-d
+
   // Sections data
   const sections = [
     { id: 'dashboard', name: 'Dashboard', link:'/', icon: <MdDashboard/> },

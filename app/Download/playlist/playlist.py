@@ -1,9 +1,8 @@
-import os
+# app/Download/playlist/playlist.py
+
 import logging
-from urllib.parse import urlparse, parse_qs
-from pytubefix import Playlist
-from app.Download.video.video import YouTubeVideoDownloader
-from app.Download.audio.audio import YouTubeAudioDownloader
+import yt_dlp
+from typing import Dict, Any
 
 # --- Basic Configuration ---
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -12,114 +11,128 @@ logger = logging.getLogger(__name__)
 
 class PlaylistDownloader:
     """
-    Orchestrates the download of multiple items from a YouTube playlist,
-    either as video+audio (MP4) or as audio-only (MP3/M4A).
+    Orchestrates playlist downloads using yt-dlp's native playlist handling
+    for maximum efficiency. Supports all playlist types, including mixes.
     """
 
     def __init__(self, socketio=None, video_downloader=None, audio_downloader=None):
         """
-        Initializes the PlaylistDownloader with its required downloader engines.
-
-        Args:
-            socketio: An optional Flask-SocketIO instance for real-time updates.
-            video_downloader: A pre-configured instance of YouTubeVideoDownloader.
-            audio_downloader: A pre-configured instance of YouTubeAudioDownloader.
+        Initializes the PlaylistDownloader.
         """
         self.socketio = socketio
-        # Use dependency injection for both downloaders for maximum flexibility and code re-use.
-        self.video_downloader = video_downloader or YouTubeVideoDownloader(socketio)
-        self.audio_downloader = audio_downloader or YouTubeAudioDownloader(socketio)
+        self.output_path = video_downloader.output_path if video_downloader else './downloads'
 
-    def _is_youtube_mix(self, url):
-        """Checks if the provided URL is for a non-downloadable YouTube Mix/Radio."""
+    def get_playlist_info(self, url: str) -> Dict[str, Any]:
+        """
+        Fetches metadata for any playlist or mix URL robustly.
+        """
+        logger.info(f"Fetching info for playlist/mix: {url}")
+        ydl_opts = {
+            # --- THIS IS THE FIX ---
+            # The 'extract_flat' optimization is removed. This makes the process slightly
+            # slower but significantly more reliable for URLs that contain both a
+            # video ID and a playlist ID (e.g., watch?v=...&list=...).
+            'quiet': True,
+            'yes_playlist': True,  # This flag remains essential.
+        }
         try:
-            query_params = parse_qs(urlparse(url).query)
-            if 'list' in query_params and query_params['list'][0].startswith('RD'):
-                return True
-        except Exception:
-            return False
-        return False
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
 
-    def get_playlist_info(self, url):
-        """
-        Fetches metadata for a given YouTube playlist URL. This is optimized for speed.
-        """
-        try:
-            if self._is_youtube_mix(url):
-                raise ValueError("YouTube Mixes/Radios are not supported. Please use a standard playlist URL.")
+                if info.get('_type') != 'playlist':
+                    raise ValueError("The provided URL is not a valid playlist or mix.")
 
-            logger.info(f"Fetching info for playlist: {url}")
-            p = Playlist(url)
+                is_mix = not info.get('playlist_count')
 
-            if not p.video_urls:
-                raise ValueError(
-                    "Could not find any videos. The playlist may be private, empty, or the URL is incorrect.")
+                if not info.get('entries'):
+                    raise ValueError("Playlist appears to be empty, private, or the URL is incorrect.")
 
-            return {
-                'status': 'success',
-                'title': p.title,
-                'video_count': len(p.video_urls),
-            }
-        except Exception as e:
-            logger.error(f"Failed to get playlist info: {e}", exc_info=True)
-            return {'status': 'error', 'message': str(e)}
-
-    def download_playlist(self, url, num_videos, quality='1080p', format='mp4'):
-        """
-        Downloads a specified number of items from a playlist in the desired format.
-
-        Args:
-            url (str): The URL of the YouTube playlist.
-            num_videos (int): The number of items to download.
-            quality (str): The desired video quality (e.g., '1080p'). Ignored for audio formats.
-            format (str): The desired output format ('mp4', 'mp3', or 'm4a').
-        """
-        try:
-            if self._is_youtube_mix(url):
-                raise ValueError("YouTube Mixes/Radios are not supported and cannot be downloaded.")
-
-            p = Playlist(url)
-            if not p.video_urls:
-                raise ValueError("Playlist is empty or invalid.")
-
-            videos_to_download = p.video_urls[:num_videos]
-            total_videos = len(videos_to_download)
-            logger.info(f"Starting playlist download for '{p.title}'. Format: {format}. Queue: {total_videos} items.")
-
-            for i, video_url in enumerate(videos_to_download, 1):
-                if self.socketio:
-                    self.socketio.emit('playlist_status', {
-                        'message': f"Starting download {i} of {total_videos}...",
-                        'current': i, 'total': total_videos
-                    })
-
-                logger.info(f"Processing item {i}/{total_videos}: {video_url}")
-
-                # --- Core Logic: Choose the correct downloader based on format ---
-                if format == 'mp4':
-                    result = self.video_downloader.download_video(video_url, quality=quality)
-                elif format in ['mp3', 'm4a']:
-                    # The `quality` parameter is ignored by the audio downloader.
-                    result = self.audio_downloader.download_audio(video_url, format=format)
+                if is_mix:
+                    playlist_title = f"Mix: {info.get('title', 'Unknown Mix')}"
+                    # For mixes, the number of entries is the number yt-dlp could find
+                    video_count = len(info.get('entries', []))
+                    if video_count == 0: video_count = 50  # Fallback
+                    self.socketio.emit('terminal_output', {
+                        'line': f'\033[93mDetected a YouTube Mix. Setting a limit of {video_count} items.\033[0m'})
                 else:
-                    # Handle unsupported format gracefully
-                    error_msg = f"Unsupported format '{format}' for playlist download. Skipping item."
-                    logger.error(error_msg)
-                    if self.socketio:
-                        self.socketio.emit('download_error', {'error': error_msg})
-                    continue  # Move to the next item in the playlist
+                    playlist_title = info.get('title')
+                    video_count = info.get('playlist_count')
 
-                if result.get('status') == 'error':
-                    logger.error(f"Failed to download item {i} ({video_url}). Skipping. Error: {result.get('message')}")
-                    if self.socketio:
-                        self.socketio.emit('download_error', {'error': f"Skipped item {i}: {result.get('message')}"})
+                return {
+                    'status': 'success',
+                    'title': playlist_title,
+                    'video_count': video_count,
+                }
+        except Exception as e:
+            logger.error(f"Failed to get playlist info: {e}", exc_info=False)
+            error_msg = str(e)
+            if "The provided URL is not a valid playlist or mix." in error_msg:
+                error_msg = "Please provide a valid YouTube Playlist or Mix URL."
+            else:
+                error_msg = "Could not fetch playlist info. It may be private or invalid."
 
-            if self.socketio:
-                self.socketio.emit('playlist_status',
-                                   {'message': "Playlist download complete!", 'current': total_videos,
-                                    'total': total_videos})
+            return {'status': 'error', 'message': error_msg}
 
+    def download_playlist(self, url: str, num_videos: int, quality: str = '1080p', format: str = 'mp4'):
+        # This function does not need any changes.
+
+        class SocketIOLogger:
+            def __init__(self, socketio_instance): self.socketio = socketio_instance
+
+            def debug(self, msg):
+                if not msg.startswith('[debug]'): self.socketio.emit('terminal_output', {'line': msg})
+
+            def warning(self, msg): self.socketio.emit('terminal_output', {'line': f'\033[93m{msg}\033[0m'})
+
+            def error(self, msg): self.socketio.emit('terminal_output', {'line': f'\033[91m{msg}\033[0m'})
+
+        def progress_hook(d: Dict[str, Any]):
+            if d['status'] == 'downloading':
+                progress_line = (
+                    f"\r\033[K"
+                    f"\033[36mDownloading item...\033[0m "
+                    f"{d.get('_percent_str', ''):>8} of {d.get('_total_bytes_str', ''):<10} "
+                    f"at {d.get('_speed_str', ''):<12} ETA {d.get('_eta_str', '')}"
+                )
+                self.socketio.emit('terminal_output', {'line': progress_line})
+
+        playlist_folder_path = f"{self.output_path}/%(playlist_title)s"
+        ydl_opts = {
+            'outtmpl': f"{playlist_folder_path}/%(playlist_index)s - %(title)s.%(ext)s",
+            'playlistend': num_videos,
+            'progress_hooks': [progress_hook],
+            'logger': SocketIOLogger(self.socketio),
+            'ignoreerrors': True,
+            'yes_playlist': True,
+        }
+
+        if format == 'mp4':
+            numeric_quality = quality.replace('p', '')
+            ydl_opts[
+                'format'] = f"bestvideo[height<={numeric_quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<={numeric_quality}]"
+            ydl_opts['merge_output_format'] = 'mp4'
+        elif format in ['mp3', 'm4a']:
+            ydl_opts['format'] = 'bestaudio/best'
+            ydl_opts['postprocessors'] = [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': format,
+                'preferredquality': '192',
+            }]
+        else:
+            self.socketio.emit('download_error', {'error': f"Unsupported format '{format}'"})
+            return
+
+        try:
+            self.socketio.emit('terminal_output', {'line': f"\n\03_3[1mStarting playlist download...\033[0m"})
+            self.socketio.emit('terminal_output', {
+                'line': f"\033[1mFormat: {format.upper()}, Quality: {quality}, Items: {num_videos}\033[0m\n"})
+
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([url])
+
+            self.socketio.emit('terminal_output', {'line': f"\n\033[32;1mPlaylist download process finished!\033[0m"})
+            self.socketio.emit('download_complete', {})
         except Exception as e:
             logger.error(f"A critical error occurred during playlist download: {e}", exc_info=True)
-            if self.socketio:
-                self.socketio.emit('download_error', {'error': f"Playlist download failed: {str(e)}"})
+            self.socketio.emit('terminal_output', {'line': f"\n\033[31mFATAL ERROR:\033[0m {str(e)}"})
+            self.socketio.emit('download_error', {'error': str(e)})

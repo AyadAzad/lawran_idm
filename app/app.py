@@ -6,17 +6,22 @@ from pathlib import Path # <-- ADD THIS IMPORT
 
 # --- Import all downloader classes ---
 from app.Download.video.video import YouTubeVideoDownloader
-from app.Download.audio.audio import YouTubeAudioDownloader
 from app.Download.uhd.uhd import YouTube4KDownloader
 from app.Download.playlist.playlist import PlaylistDownloader
 from app.Download.downloads import DownloadManager
-
+from app.Download.audio.audio import YouTubeAudioDownloader
 app = Flask(__name__)
-CORS(app)
+# This configuration explicitly tells the browser that any origin ('*') is allowed
+# to make requests to any of our API routes or download routes. This is essential
+# for the browser extension to be able to communicate with the server.
+CORS(app, resources={
+    r"/api/*": {"origins": "*"},
+    r"/downloads/*": {"origins": "*"}
+})
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode='threading')
 
 # ==============================================================================
-# --- THE DEFINITIVE FIX: Define the system-wide "Lawran IDM" downloads folder ---
+# --- Define the system-wide "Lawran IDM" downloads folder ---
 # ==============================================================================
 # 1. Get the user's home directory in a cross-platform way.
 home_dir = Path.home()
@@ -49,20 +54,48 @@ def serve(path):
 @app.route('/api/download/video', methods=['POST'])
 def download_video_route():
     data = request.json
-    result = video_downloader.download_video(data.get('url'), quality=data.get('quality', '1080p'))
-    return jsonify(result)
+    url = data.get('url')
+    quality = data.get('quality', '1080p')
+
+    # --- THIS IS THE CRITICAL CHANGE ---
+    # Instead of waiting for a result, we start a background task.
+    # This keeps the server responsive.
+    socketio.start_background_task(
+        target=video_downloader.download_video,
+        url=url,
+        quality=quality
+    )
+    # Return an immediate response to the client.
+    return jsonify({'status': 'success', 'message': 'Download has started.'})
+
 
 @app.route('/api/download/audio', methods=['POST'])
 def download_audio_route():
     data = request.json
-    result = audio_downloader.download_audio(data.get('url'), format=data.get('format', 'mp3'))
-    return jsonify(result)
+    url = data.get('url')
+    audio_format = data.get('format', 'mp3')
+
+    socketio.start_background_task(
+        target=audio_downloader.download_audio,
+        url=url,
+        format=audio_format
+    )
+    # Return an immediate success response
+    return jsonify({'status': 'success', 'message': 'Audio extraction has started.'})
 
 @app.route('/api/download/4k', methods=['POST'])
 def download_4k_route():
     data = request.json
-    result = downloader_4k.download_4k_video(data.get('url'))
-    return jsonify(result)
+    url = data.get('url')
+
+
+    # Start the 4K download as a background task
+    socketio.start_background_task(
+        target=downloader_4k.download_4k_video,
+        url=url
+    )
+    # Return an immediate success response
+    return jsonify({'status': 'success', 'message': 'UHD download has started.'})
 
 @app.route('/api/playlist/info', methods=['POST'])
 def playlist_info_route():
@@ -70,9 +103,14 @@ def playlist_info_route():
     result = playlist_downloader.get_playlist_info(data.get('url'))
     return jsonify(result)
 
+
 @app.route('/api/playlist/download', methods=['POST'])
 def playlist_download_route():
     data = request.json
+
+    # --- THIS IS THE CRITICAL CHANGE ---
+    # Start the playlist download as a background task.
+    # The frontend will get progress updates via Socket.IO.
     socketio.start_background_task(
         target=playlist_downloader.download_playlist,
         url=data.get('url'),
@@ -80,6 +118,7 @@ def playlist_download_route():
         quality=data.get('quality', '1080p'),
         format=data.get('format', 'mp4')
     )
+    # Return an immediate success response.
     return jsonify({'status': 'success', 'message': 'Playlist download has started.'})
 
 @app.route('/api/downloads/list', methods=['GET'])

@@ -1,72 +1,47 @@
+// src/components/DownloadPlaylist/DownloadPlaylist.jsx
+
 import { useState, useEffect, useContext } from 'react';
 import { SocketContext } from '../../context/socket';
 import { motion, AnimatePresence } from 'framer-motion';
-import {ListVideo} from "lucide-react";
-// Import the new smaller components
+import { ListVideo } from "lucide-react";
 import Header from '../common/Header.jsx';
 import PlaylistFetchForm from './PlaylistFetchForm';
 import PlaylistConfigForm from './PlaylistConfigForm';
-import PlaylistProgress from './PlaylistProgress';
+import TerminalDisplay from '../common/TerminalDisplay'; // <-- IMPORT THE TERMINAL
 
-/**
- * Reusable animation variants for staggering item appearance.
- * @type {object}
- */
 const containerVariants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { staggerChildren: 0.1 } },
 };
 
-/**
- * Renders the main page for downloading YouTube playlists.
- * This component acts as the "controller" that holds all the state and logic,
- * passing props down to its child presentational components.
- */
 export default function DownloadPlaylist() {
-  // ==================================================================
-  // --- CORE LOGIC - UNCHANGED ---
-  // ==================================================================
   const socket = useContext(SocketContext);
   const [url, setUrl] = useState('');
   const [format, setFormat] = useState('mp4');
   const [quality, setQuality] = useState('1080p');
-  const [numToDownload, setNumToDownload] = useState(5);
+  const [numToDownload, setNumToDownload] = useState(1);
   const [playlistInfo, setPlaylistInfo] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
-  const [playlistStatus, setPlaylistStatus] = useState('');
-  const [currentVideoProgress, setCurrentVideoProgress] = useState(null);
-  const [completedVideos, setCompletedVideos] = useState([]);
+  const [error, setError] = useState('');
+  const [logs, setLogs] = useState([]); // <-- STATE FOR TERMINAL
 
   useEffect(() => {
-    const playlistStatusHandler = (data) => {
-      setPlaylistStatus(data.message);
-      setCurrentVideoProgress(null);
-      if (data.message === "Playlist download complete!") {
-          setIsDownloading(false);
-      }
-    };
-    const progressHandler = (data) => {
-      if (data.status === 'complete') {
-        setCompletedVideos(prev => [...prev, data]);
-        setCurrentVideoProgress(null);
-      } else {
-        setCurrentVideoProgress(data);
-      }
-    };
-    const errorHandler = (error) => {
-       setPlaylistStatus(`Error: ${error.error}`);
-       setIsDownloading(false);
+    const terminalOutputHandler = (data) => setLogs(prev => [...prev, data.line]);
+    const downloadCompleteHandler = () => setIsDownloading(false);
+    const downloadErrorHandler = (err) => {
+      setError(err.error);
+      setIsDownloading(false);
     };
 
-    socket.on('playlist_status', playlistStatusHandler);
-    socket.on('download_progress', progressHandler);
-    socket.on('download_error', errorHandler);
+    socket.on('terminal_output', terminalOutputHandler);
+    socket.on('download_complete', downloadCompleteHandler);
+    socket.on('download_error', downloadErrorHandler);
 
     return () => {
-      socket.off('playlist_status', playlistStatusHandler);
-      socket.off('download_progress', progressHandler);
-      socket.off('download_error', errorHandler);
+      socket.off('terminal_output', terminalOutputHandler);
+      socket.off('download_complete', downloadCompleteHandler);
+      socket.off('download_error', downloadErrorHandler);
     };
   }, [socket]);
 
@@ -74,8 +49,7 @@ export default function DownloadPlaylist() {
     if (!url) return;
     setIsLoading(true);
     setPlaylistInfo(null);
-    setPlaylistStatus('');
-    setCompletedVideos([]);
+    setError('');
     try {
       const response = await fetch('/api/playlist/info', {
         method: 'POST',
@@ -85,9 +59,9 @@ export default function DownloadPlaylist() {
       const result = await response.json();
       if (result.status === 'error') throw new Error(result.message);
       setPlaylistInfo(result);
-      setNumToDownload(result.video_count);
-    } catch (error) {
-      setPlaylistStatus(`Error fetching playlist: ${error.message}`);
+      setNumToDownload(result.video_count); // Default to all
+    } catch (err) {
+      setError(`Error fetching playlist: ${err.message}`);
     } finally {
       setIsLoading(false);
     }
@@ -96,44 +70,47 @@ export default function DownloadPlaylist() {
   const handleDownloadPlaylist = async () => {
     if (!playlistInfo) return;
     setIsDownloading(true);
-    setPlaylistStatus('Requesting playlist download...');
-    setCompletedVideos([]);
-    try {
-      await fetch('/api/playlist/download', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, num_videos: Number(numToDownload), quality, format })
-      });
-    } catch (error) {
-       setPlaylistStatus(`Error starting download: ${error.message}`);
-       setIsDownloading(false);
-    }
+    setLogs([]); // Clear logs for new download
+    setError('');
+    await fetch('/api/playlist/download', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, num_videos: Number(numToDownload), quality, format })
+    });
   };
 
   const isAudioFormat = format === 'mp3' || format === 'm4a';
-  // ==================================================================
-  // --- END OF CORE LOGIC ---
-  // ==================================================================
 
   return (
     <div className="min-h-screen bg-gray-900 text-white font-sans p-4 sm:p-8">
       <motion.div variants={containerVariants} initial="hidden" animate="visible" className="max-w-3xl mx-auto">
         <Header
-            title=" Playlist Power-Downloader"
-            subtitle="Download entire YouTube playlists as video or audio."
-            icon={<ListVideo size={40}/>}
-            gradient="from-rose-400 to-fuchsia-500"
+          title="Playlist Power-Downloader"
+          subtitle="Download entire YouTube playlists as video or audio."
+          icon={<ListVideo size={40} />}
+          gradient="from-rose-400 to-fuchsia-500"
         />
 
-        <PlaylistFetchForm
-          url={url}
-          setUrl={setUrl}
-          handleFetchInfo={handleFetchInfo}
-          isLoading={isLoading}
-        />
+        {/* Step 1: Fetch Form (only show if not downloading) */}
+        {!isDownloading && (
+          <PlaylistFetchForm
+            url={url}
+            setUrl={setUrl}
+            handleFetchInfo={handleFetchInfo}
+            isLoading={isLoading}
+          />
+        )}
 
+        {/* Display fetch error if any */}
+        {error && !isDownloading && (
+            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} className="bg-red-500/10 text-red-400 p-4 rounded-lg text-center mb-6">
+                {error}
+            </motion.div>
+        )}
+
+        {/* Step 2: Config Form (only show if info is fetched and not downloading) */}
         <AnimatePresence>
-          {playlistInfo && (
+          {playlistInfo && !isDownloading && (
             <PlaylistConfigForm
               playlistInfo={playlistInfo}
               numToDownload={numToDownload}
@@ -149,15 +126,16 @@ export default function DownloadPlaylist() {
           )}
         </AnimatePresence>
 
+        {/* Step 3: Terminal Display (only show when a download is active) */}
         <AnimatePresence>
-          {(isDownloading || completedVideos.length > 0 || (playlistStatus && !playlistInfo)) && (
-            <PlaylistProgress
-              playlistStatus={playlistStatus}
-              currentVideoProgress={currentVideoProgress}
-              completedVideos={completedVideos}
-            />
+          {isDownloading && (
+            <motion.div initial={{opacity: 0}} animate={{opacity: 1}} exit={{opacity: 0}}>
+                <h2 className="text-xl font-semibold mb-4">Download Progress</h2>
+                <TerminalDisplay logs={logs} />
+            </motion.div>
           )}
         </AnimatePresence>
+
       </motion.div>
     </div>
   );

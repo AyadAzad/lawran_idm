@@ -9,7 +9,6 @@ import Download4K from "./components/Download4K/Download4K.jsx";
 import DownloadPlaylist from "./components/DownloadPlaylist/DownloadPlaylist.jsx";
 import Downloads from "./components/Downloads/Downloads.jsx";
 import Dashboard from "./components/Dashboard/index.jsx";
-
 function App() {
     const [cursorVariant, setCursorVariant] = useState("default");
   const [cursorText, setCursorText] = useState("");
@@ -24,7 +23,6 @@ function App() {
       { path: 'download-audio', element: <DownloadAudio /> },
       { path: 'download-4k', element: <Download4K /> },
       { path: 'download-playlist', element: <DownloadPlaylist /> },
-      // The 'summarize-video' route is included as a placeholder
       { path: 'summarize-video', element: <div className="text-white">Summarize Video Page</div> },
       { path: 'downloads', element: <Downloads /> },
     ],
