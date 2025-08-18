@@ -1,8 +1,8 @@
 from flask import Flask, send_from_directory, request, jsonify
 from flask_cors import CORS
-from flask_socketio import SocketIO, emit
+from flask_socketio import SocketIO
 import os
-from pathlib import Path # <-- ADD THIS IMPORT
+from pathlib import Path  # <-- ADD THIS IMPORT
 
 # --- Import all downloader classes ---
 from app.Download.video.video import YouTubeVideoDownloader
@@ -10,6 +10,8 @@ from app.Download.uhd.uhd import YouTube4KDownloader
 from app.Download.playlist.playlist import PlaylistDownloader
 from app.Download.downloads import DownloadManager
 from app.Download.audio.audio import YouTubeAudioDownloader
+from app.Download.other_platforms.other_platforms import OtherPlatformsDownloader
+
 app = Flask(__name__)
 # This configuration explicitly tells the browser that any origin ('*') is allowed
 # to make requests to any of our API routes or download routes. This is essential
@@ -32,13 +34,13 @@ DOWNLOADS_DIR = home_dir / "Downloads" / "Lawran IDM"
 os.makedirs(DOWNLOADS_DIR, exist_ok=True)
 print(f"--- Downloads will be saved to: {DOWNLOADS_DIR} ---")
 
-
 # --- Instantiate all managers, PASSING THE NEW SYSTEM PATH to them ---
 video_downloader = YouTubeVideoDownloader(socketio, output_path=DOWNLOADS_DIR)
 audio_downloader = YouTubeAudioDownloader(socketio, output_path=DOWNLOADS_DIR)
 downloader_4k = YouTube4KDownloader(socketio, output_path=DOWNLOADS_DIR)
 playlist_downloader = PlaylistDownloader(socketio, video_downloader, audio_downloader)
 download_manager = DownloadManager(download_folder=DOWNLOADS_DIR)
+other_downloader = OtherPlatformsDownloader(socketio, output_path=DOWNLOADS_DIR)
 
 
 @app.route('/', defaults={'path': ''})
@@ -83,11 +85,11 @@ def download_audio_route():
     # Return an immediate success response
     return jsonify({'status': 'success', 'message': 'Audio extraction has started.'})
 
+
 @app.route('/api/download/4k', methods=['POST'])
 def download_4k_route():
     data = request.json
     url = data.get('url')
-
 
     # Start the 4K download as a background task
     socketio.start_background_task(
@@ -96,6 +98,7 @@ def download_4k_route():
     )
     # Return an immediate success response
     return jsonify({'status': 'success', 'message': 'UHD download has started.'})
+
 
 @app.route('/api/playlist/info', methods=['POST'])
 def playlist_info_route():
@@ -121,6 +124,22 @@ def playlist_download_route():
     # Return an immediate success response.
     return jsonify({'status': 'success', 'message': 'Playlist download has started.'})
 
+
+@app.route('/api/download/other', methods=['POST'])
+def download_other_route():
+    data = request.json
+    url = data.get('url')
+    if not url:
+        return jsonify({'status': 'error', 'message': 'URL is required'}), 400
+
+    socketio.start_background_task(
+        target=other_downloader.download_media,  # <-- Make sure it calls download_media
+        url=url
+    )
+
+    return jsonify({'status': 'success', 'message': 'Universal download has started.'})
+
+
 @app.route('/api/downloads/list', methods=['GET'])
 def list_downloads_route():
     files = download_manager.list_files()
@@ -131,6 +150,7 @@ def list_downloads_route():
 @socketio.on('connect')
 def handle_connect():
     print('Client connected')
+
 
 @socketio.on('disconnect')
 def handle_disconnect():

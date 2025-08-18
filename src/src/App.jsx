@@ -9,6 +9,7 @@ import Download4K from "./components/Download4K/Download4K.jsx";
 import DownloadPlaylist from "./components/DownloadPlaylist/DownloadPlaylist.jsx";
 import Downloads from "./components/Downloads/Downloads.jsx";
 import Dashboard from "./components/Dashboard/index.jsx";
+import OtherPlatforms from "./components/OtherPlatforms/DownloadOtherPlatforms.jsx";
 function App() {
     const [cursorVariant, setCursorVariant] = useState("default");
   const [cursorText, setCursorText] = useState("");
@@ -23,7 +24,7 @@ function App() {
       { path: 'download-audio', element: <DownloadAudio /> },
       { path: 'download-4k', element: <Download4K /> },
       { path: 'download-playlist', element: <DownloadPlaylist /> },
-      { path: 'summarize-video', element: <div className="text-white">Summarize Video Page</div> },
+      { path: 'other-platforms', element: <OtherPlatforms />},
       { path: 'downloads', element: <Downloads /> },
     ],
   },

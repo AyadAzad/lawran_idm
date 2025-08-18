@@ -164,7 +164,7 @@ const TerminalDisplay = ({ logs }) => {
             whileHover={{ scale: 1.05 }}
           >
             <TerminalIcon className="w-4 h-4 text-emerald-400" />
-            <span>legendary-terminal</span>
+            <span>Lawran-terminal</span>
           </motion.div>
         </div>
 
@@ -257,7 +257,7 @@ const TerminalDisplay = ({ logs }) => {
               className="absolute bottom-4 left-4 flex items-center px-3 py-2 text-sm rounded-lg bg-white/5 backdrop-blur-sm"
             >
               <span className="text-green-400">➜</span>
-              <span className="ml-2 text-white/80">Type your command here...</span>
+              <span className="ml-2 text-white/80">See Download progress here...</span>
               <motion.div
                 className="ml-2 w-2 h-5 bg-white/80"
                 animate={{ opacity: [0, 1, 0] }}

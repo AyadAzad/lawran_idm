@@ -19,7 +19,7 @@ const SideBar = ({isMinimized, setIsMinimized}) => {
     { id: 'Download Audio', name: 'Download Audio', link:'/download-audio', icon: <LuAudioLines/> },
     { id: 'Download 4K', name: 'Download 4k', link:'/download-4k', icon: <Md4K/> },
     { id: 'Download Playlist', name: 'Download Playlist', link:'/download-playlist', icon: <MdOutlinePlaylistAdd/> },
-    { id: 'Summarize Video', name: 'Summarize Video', link:'/summarize-video', icon: <MdSummarize/> },
+    { id: 'Other Platforms', name: 'Other Platforms', link:'/other-platforms', icon: <MdSummarize/> },
     { id: 'downloads', name: 'Downloads', link:'/downloads', icon: <FaFolder/> },
   ];
 
