@@ -20,25 +20,18 @@ const SideBar = ({isMinimized, setIsMinimized}) => {
     { id: 'Download 4K', name: 'Download 4k', link:'/download-4k', icon: <Md4K/> },
     { id: 'Download Playlist', name: 'Download Playlist', link:'/download-playlist', icon: <MdOutlinePlaylistAdd/> },
     { id: 'Other Platforms', name: 'Other Platforms', link:'/other-platforms', icon: <MdSummarize/> },
+    { id: 'Documents', name: 'Documents', link:'/documents', icon: <MdSummarize/> },
     { id: 'downloads', name: 'Downloads', link:'/downloads', icon: <FaFolder/> },
   ];
 
   return (
     <div
-      className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-indigo-900 to-purple-900 text-white transition-all duration-500 ease-in-out ${isMinimized ? 'w-20' : 'w-64'} shadow-2xl z-50`}
-      // onMouseEnter={() => setIsHovered(true)}
-      // onMouseLeave={() => setIsHovered(false)}
-    >
+      className={`fixed left-0 top-0 h-screen bg-gradient-to-b from-indigo-900 to-purple-900 text-white transition-all duration-500 ease-in-out ${isMinimized ? 'w-20' : 'w-64'} shadow-2xl z-50`}>
       {/* Logo/Header */}
       <div className={`flex items-center justify-center p-6 border-b border-purple-700 transition-all duration-300 ${isMinimized ? 'flex-col' : 'flex-row'}`}>
         <div className="text-3xl bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent font-bold">
-          {isMinimized ? '⚡' : 'Lawran'}
+          {isMinimized ? '⚡' : 'Lawran IDM'}
         </div>
-        {/*{(!isMinimized || isHovered) && (*/}
-        {/*  <span className={`ml-2 text-sm font-light text-purple-200 ${isMinimized ? 'mt-2' : ''}`}>*/}
-        {/*    tech*/}
-        {/*  </span>*/}
-        {/*)}*/}
       </div>
 
       {/* Navigation */}

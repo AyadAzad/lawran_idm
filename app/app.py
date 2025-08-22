@@ -11,7 +11,7 @@ from app.Download.playlist.playlist import PlaylistDownloader
 from app.Download.downloads import DownloadManager
 from app.Download.audio.audio import YouTubeAudioDownloader
 from app.Download.other_platforms.other_platforms import OtherPlatformsDownloader
-
+from app.Download.documents.documents import DocumentDownloader
 app = Flask(__name__)
 # This configuration explicitly tells the browser that any origin ('*') is allowed
 # to make requests to any of our API routes or download routes. This is essential
@@ -41,7 +41,7 @@ downloader_4k = YouTube4KDownloader(socketio, output_path=DOWNLOADS_DIR)
 playlist_downloader = PlaylistDownloader(socketio, video_downloader, audio_downloader)
 download_manager = DownloadManager(download_folder=DOWNLOADS_DIR)
 other_downloader = OtherPlatformsDownloader(socketio, output_path=DOWNLOADS_DIR)
-
+document_downloader = DocumentDownloader(socketio, output_path=DOWNLOADS_DIR)
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
@@ -139,6 +139,17 @@ def download_other_route():
 
     return jsonify({'status': 'success', 'message': 'Universal download has started.'})
 
+
+@app.route('/api/download/document', methods=['POST'])
+def download_document_route():
+    data = request.json
+    url = data.get('url')
+    # Start the generic download as a background task
+    socketio.start_background_task(
+        target=document_downloader.download_document,
+        url=url
+    )
+    return jsonify({'status': 'success', 'message': 'Document download has started.'})
 
 @app.route('/api/downloads/list', methods=['GET'])
 def list_downloads_route():
