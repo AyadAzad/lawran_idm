@@ -11,7 +11,7 @@ import DownloadFormWrapper from '../common/DownloadFormWrapper';
 import ActionButton from '../common/ui/ActionButton';
 import SelectInput from '../common/ui/SelectInput';
 import URLInput from '../common/ui/URLInput';
-import TerminalDisplay from '../common/TerminalDisplay'; // <-- IMPORT THE NEW COMPONENT
+import TerminalDisplay from '../common/TerminalDisplay';
 
 const containerVariants = { hidden: { opacity: 0 }, visible: { opacity: 1, transition: { staggerChildren: 0.1 } } };
 
@@ -20,20 +20,22 @@ export default function DownloadVideo() {
   const [url, setUrl] = useState('');
   const [quality, setQuality] = useState('1080p');
   const [isRequesting, setIsRequesting] = useState(false);
-  const [logs, setLogs] = useState([]); // <-- NEW STATE FOR TERMINAL LOGS
+  const [logs, setLogs] = useState([]);
 
   useEffect(() => {
-    const terminalOutputHandler = (data) => {
-      setLogs(prev => [...prev, data.line]);
-    };
+    const queryParams = new URLSearchParams(window.location.search);
+    const urlFromExtension = queryParams.get('url');
+    if (urlFromExtension) {
+      setUrl(urlFromExtension);
+    }
+  }, []);
 
-    const downloadCompleteHandler = () => {
-      setIsRequesting(false); // Re-enable the button
-    };
-
+  useEffect(() => {
+    const terminalOutputHandler = (data) => setLogs(prev => [...prev, data.line]);
+    const downloadCompleteHandler = () => setIsRequesting(false);
     const downloadErrorHandler = (error) => {
       console.error("Download error:", error);
-      setIsRequesting(false); // Re-enable the button on error
+      setIsRequesting(false);
     };
 
     socket.on('terminal_output', terminalOutputHandler);
@@ -50,12 +52,26 @@ export default function DownloadVideo() {
   const handleDownload = async () => {
     if (!url || isRequesting) return;
     setIsRequesting(true);
-    setLogs([]); // <-- CLEAR LOGS FOR NEW DOWNLOAD
-    await fetch('/api/download/video', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url, quality })
-    });
+    setLogs([]); // Clear logs for new download
+
+    // --- 🚀 JS_API INTEGRATION 🚀 ---
+    if (window.pywebview && window.pywebview.api) {
+      try {
+        // Directly call the Python function. It returns a promise.
+        const response = await window.pywebview.api.download_video(url, quality);
+        console.log('Python API Response:', response.message);
+      } catch (error) {
+        console.error('Python API call failed:', error);
+        // Add a visible error to the terminal and stop the loading state
+        setLogs(prev => [...prev, `\x1b[91m[FATAL] Could not start download: ${error}\x1b[0m`]);
+        setIsRequesting(false);
+      }
+    } else {
+      console.warn('pywebview API not available. Are you running in a browser?');
+      setLogs(prev => [...prev, '\x1b[93m[WARN] pywebview API not detected.\x1b[0m']);
+      setIsRequesting(false); // Stop loading if API is not there
+    }
+    // --- END INTEGRATION ---
   };
 
   const qualityOptions = [
@@ -99,12 +115,9 @@ export default function DownloadVideo() {
             {isRequesting ? 'Download in Progress...' : 'Start Download'}
           </ActionButton>
         </DownloadFormWrapper>
-
-        {/* List of active and completed downloads */}
         <div className="mt-8">
-          <TerminalDisplay logs={logs} /> {/* <-- REPLACE DOWNLOAD LIST WITH TERMINAL */}
+          <TerminalDisplay logs={logs} />
         </div>
-
       </motion.div>
     </div>
   );

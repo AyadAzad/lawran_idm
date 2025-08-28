@@ -59,7 +59,6 @@ def download_video_route():
     url = data.get('url')
     quality = data.get('quality', '1080p')
 
-    # --- THIS IS THE CRITICAL CHANGE ---
     # Instead of waiting for a result, we start a background task.
     # This keeps the server responsive.
     socketio.start_background_task(
